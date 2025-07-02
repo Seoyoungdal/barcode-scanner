@@ -2,15 +2,15 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>출하 바코드 스캐너 (최적화)</title>
+  <title>최적화된 출하 바코드 스캐너</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     #reader { width: 320px; margin: 10px 0; border: 1px solid #ccc; }
-    #alert-box { min-height: 1.5em; font-weight: bold; margin-top: 10px; }
+    #alert-box { min-height: 1.5em; font-weight: bold; margin: 10px 0; }
     #result-list div {
-      margin-bottom: 5px; padding: 4px; border-bottom: 1px solid #eee;
+      margin-bottom: 5px; padding: 5px; border-bottom: 1px solid #eee;
       background: #f9f9f9;
     }
     .flash { background-color: #d4f4dd !important; transition: background 0.3s ease; }
@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-  <h2>📦 빠른 출하 바코드 스캐너</h2>
+  <h2>📦 고성능 출하 바코드 스캐너</h2>
 
   <label for="camera-select">🎥 카메라 선택:</label>
   <select id="camera-select"><option value="">-- 선택하세요 --</option></select>
@@ -39,8 +39,8 @@
   <script>
     const html5QrCode = new Html5Qrcode("reader");
     const cameraSelect = document.getElementById("camera-select");
-    const alertBox = document.getElementById("alert-box");
     const resultList = document.getElementById("result-list");
+    const alertBox = document.getElementById("alert-box");
     const beep = document.getElementById("beep");
     const scannedCodes = new Set();
     let isScanning = true;
@@ -55,7 +55,7 @@
           cameraSelect.appendChild(option);
         });
       } catch {
-        alertBox.textContent = "🚫 카메라 불러오기 실패";
+        alertBox.textContent = "🚫 카메라 정보를 불러올 수 없습니다.";
       }
     }
 
@@ -78,19 +78,26 @@
       resultList.appendChild(div);
       setTimeout(() => div.classList.remove("flash"), 400);
 
+      alertBox.textContent = "";
       isScanning = false;
-      setTimeout(() => { isScanning = true; }, 1500); // 스캔 간격 1.5초로 단축
+      setTimeout(() => { isScanning = true; }, 1500);
     }
 
     loadCameras();
 
     document.getElementById("start-button").onclick = () => {
       const camId = cameraSelect.value;
-      if (!camId) return alert("카메라 선택 필요!");
+      if (!camId) return alert("카메라를 선택하세요!");
       html5QrCode.start(
-        { deviceId: { exact: camId } },
         {
-          fps: 30, // 빠른 프레임
+          deviceId: { exact: camId },
+          advanced: [
+            { width: { ideal: 1280 }, height: { ideal: 720 } },
+            { focusMode: "continuous" }
+          ]
+        },
+        {
+          fps: 30,
           qrbox: { width: 300, height: 300 },
           aspectRatio: 1.333
         },
@@ -107,21 +114,19 @@
     };
 
     document.getElementById("save-text").onclick = () => {
-      const lines = Array.from(scannedCodes);
-      if (lines.length === 0) return alert("스캔 항목 없음");
-      const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+      const list = Array.from(scannedCodes);
+      if (list.length === 0) return alert("스캔된 항목이 없습니다.");
+      const blob = new Blob([list.join("\n")], { type: "text/plain" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `출하리스트_${new Date().toISOString().slice(0,10)}.txt`;
-      document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
     };
 
     document.getElementById("save-excel").onclick = () => {
-      const data = Array.from(scannedCodes).map(item => [item]);
-      if (data.length === 0) return alert("스캔 항목 없음");
-      const sheet = XLSX.utils.aoa_to_sheet([["출하일시 - 바코드"], ...data]);
+      const rows = Array.from(scannedCodes).map(item => [item]);
+      if (rows.length === 0) return alert("스캔된 항목이 없습니다.");
+      const sheet = XLSX.utils.aoa_to_sheet([["출하일시 - 바코드"], ...rows]);
       const book = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(book, sheet, "출하리스트");
       XLSX.writeFile(book, `출하리스트_${new Date().toISOString().slice(0,10)}.xlsx`);
