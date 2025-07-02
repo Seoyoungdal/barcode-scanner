@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>출하 바코드 스캐너 (최신 항목 위로)</title>
+  <title>출하 바코드 스캐너</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
@@ -75,12 +75,12 @@
       const div = document.createElement("div");
       div.textContent = key;
       div.classList.add("flash");
-      resultList.prepend(div); // ← 여기! 맨 위에 추가되도록 수정됨
-      setTimeout(() => div.classList.remove("flash"), 400);
+      resultList.prepend(div); // 최신 항목을 위로
 
+      setTimeout(() => div.classList.remove("flash"), 400);
       alertBox.textContent = "";
       isScanning = false;
-      setTimeout(() => { isScanning = true; }, 1500);
+      setTimeout(() => { isScanning = true; }, 1500); // 스캔 간격
     }
 
     loadCameras();
@@ -89,17 +89,16 @@
       const camId = cameraSelect.value;
       if (!camId) return alert("카메라를 선택하세요!");
       html5QrCode.start(
-        {
-          deviceId: { exact: camId },
-          advanced: [
-            { width: { ideal: 1280 }, height: { ideal: 720 } },
-            { focusMode: "continuous" }
-          ]
-        },
+        camId, // 문자열만 전달
         {
           fps: 30,
           qrbox: { width: 300, height: 300 },
-          aspectRatio: 1.333
+          aspectRatio: 1.333,
+          videoConstraints: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            focusMode: "continuous"
+          }
         },
         appendResult,
         () => {}
