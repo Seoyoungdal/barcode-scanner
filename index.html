@@ -2,134 +2,122 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>출하 바코드 스캐너</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <title>📷 바코드 스캔</title>
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #reader { width: 320px; margin: 10px 0; border: 1px solid #ccc; }
-    #alert-box { min-height: 1.5em; font-weight: bold; margin: 10px 0; }
-    #result-list div {
-      margin-bottom: 5px; padding: 5px; border-bottom: 1px solid #eee;
-      background: #f9f9f9;
+    body {
+      font-size: clamp(1rem, 2vw, 1.5rem);
+      text-align: center;
+      padding: 1rem;
+      background: #fdfdfd;
+      color: #333;
     }
-    .flash { background-color: #d4f4dd !important; transition: background 0.3s ease; }
-    select, button { margin: 5px 5px 10px 0; padding: 6px; }
+    video {
+      width: 100%;
+      max-width: 600px;
+      border: 2px solid #ddd;
+      margin: 1rem 0;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      padding: 4px 0;
+    }
+    .btn-group button {
+      margin: 0.5rem;
+      padding: 0.7rem 1.2rem;
+      font-size: 1rem;
+    }
   </style>
 </head>
 <body>
-  <h2>📦 출하 바코드 스캐너</h2>
+  <h1>📦 바코드 스캔 앱</h1>
 
-  <label for="camera-select">🎥 카메라 선택:</label>
-  <select id="camera-select"><option value="">-- 선택하세요 --</option></select>
-  <button id="start-button">▶️ 스캔 시작</button>
-  <button id="stop-button">⏹️ 스캔 중지</button>
+  <select id="cameraSelect"></select><br>
+  <video id="video" autoplay muted></video>
 
-  <div id="reader"></div>
-  <div id="alert-box"></div>
+  <h2>📄 바코드 목록</h2>
+  <ul id="list"></ul>
 
-  <h3>📋 스캔된 출하 리스트</h3>
-  <div id="result-list"></div>
+  <div class="btn-group">
+    <button onclick="exportToExcel()">💾 Excel로 저장</button>
+    <button onclick="exportToTxt()">📄 텍스트로 저장</button>
+  </div>
 
-  <button id="save-text">💾 텍스트 저장</button>
-  <button id="save-excel">📊 엑셀 저장</button>
-
-  <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+  <audio id="ding" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
 
   <script>
-    const html5QrCode = new Html5Qrcode("reader");
-    const cameraSelect = document.getElementById("camera-select");
-    const resultList = document.getElementById("result-list");
-    const alertBox = document.getElementById("alert-box");
-    const beep = document.getElementById("beep");
-    const scannedCodes = new Set();
-    let isScanning = true;
+    const selectedDeviceId = { id: null };
+    const listEl = document.getElementById('list');
+    const barcodeList = [];
+    const videoEl = document.getElementById('video');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const beep = document.getElementById('ding');
 
-    async function loadCameras() {
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        devices.forEach(device => {
-          const option = document.createElement("option");
-          option.value = device.id;
-          option.textContent = device.label || `카메라 ${cameraSelect.length + 1}`;
-          cameraSelect.appendChild(option);
-        });
-      } catch {
-        alertBox.textContent = "🚫 카메라 정보를 불러올 수 없습니다.";
-      }
-    }
+    const scanner = new ZXing.BrowserMultiFormatReader();
 
-    function appendResult(code) {
-      if (!isScanning) return;
-      const today = new Date().toISOString().slice(0,10);
-      const key = `${today} - ${code}`;
-
-      if (scannedCodes.has(key)) {
-        alertBox.textContent = "⚠️ 이미 스캔된 항목입니다!";
-        alertBox.style.color = "red";
-        return;
-      }
-
-      beep.play();
-      scannedCodes.add(key);
-      const div = document.createElement("div");
-      div.textContent = key;
-      div.classList.add("flash");
-      resultList.prepend(div);
-      setTimeout(() => div.classList.remove("flash"), 400);
-
-      alertBox.textContent = "";
-      isScanning = false;
-      setTimeout(() => { isScanning = true; }, 1500);
-    }
-
-    loadCameras();
-
-    document.getElementById("start-button").onclick = () => {
-      const camId = cameraSelect.value;
-      if (!camId) return alert("카메라를 선택하세요!");
-      html5QrCode.start(
-        camId,
-        {
-          fps: 30,
-          qrbox: { width: 300, height: 300 },
-          aspectRatio: 1.333,
-          videoConstraints: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            focusMode: "continuous"
-          }
-        },
-        appendResult,
-        () => {}
-      ).catch(err => alert("스캔 시작 실패: " + err));
-    };
-
-    document.getElementById("stop-button").onclick = () => {
-      html5QrCode.stop().then(() => {
-        html5QrCode.clear();
-        alertBox.textContent = "⏹️ 스캔이 중지되었습니다.";
+    navigator.mediaDevices.enumerateDevices().then(devices => {
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      videoDevices.forEach((device, index) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `Camera ${index + 1}`;
+        cameraSelect.appendChild(option);
       });
+
+      selectedDeviceId.id = videoDevices[0].deviceId;
+      cameraSelect.value = selectedDeviceId.id;
+      startScan(selectedDeviceId.id);
+    });
+
+    cameraSelect.onchange = () => {
+      selectedDeviceId.id = cameraSelect.value;
+      scanner.reset();
+      startScan(selectedDeviceId.id);
     };
 
-    document.getElementById("save-text").onclick = () => {
-      const list = Array.from(scannedCodes);
-      if (list.length === 0) return alert("스캔된 항목이 없습니다.");
-      const blob = new Blob([list.join("\n")], { type: "text/plain" });
-      const link = document.createElement("a");
+    function startScan(deviceId) {
+      scanner.decodeFromVideoDevice(deviceId, videoEl, (result, err) => {
+        if (result) {
+          const text = result.getText();
+          beep.play();
+          flash();
+          if (barcodeList.includes(text)) {
+            alert(`🔁 중복된 바코드: ${text}`);
+            return;
+          }
+          barcodeList.push(text);
+          const li = document.createElement('li');
+          li.textContent = text;
+          listEl.appendChild(li);
+        }
+      });
+    }
+
+    function flash() {
+      document.body.style.backgroundColor = '#fff9b1';
+      setTimeout(() => {
+        document.body.style.backgroundColor = '#fdfdfd';
+      }, 150);
+    }
+
+    function exportToExcel() {
+      const ws = XLSX.utils.aoa_to_sheet([['바코드 목록'], ...barcodeList.map(code => [code])]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Barcodes');
+      XLSX.writeFile(wb, 'barcodes.xlsx');
+    }
+
+    function exportToTxt() {
+      const blob = new Blob([barcodeList.join('\n')], { type: 'text/plain' });
+      const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `출하리스트_${new Date().toISOString().slice(0,10)}.txt`;
+      link.download = 'barcodes.txt';
       link.click();
-    };
-
-    document.getElementById("save-excel").onclick = () => {
-      const rows = Array.from(scannedCodes).map(item => [item]);
-      if (rows.length === 0) return alert("스캔된 항목이 없습니다.");
-      const sheet = XLSX.utils.aoa_to_sheet([["출하일시 - 바코드"], ...rows]);
-      const book = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(book, sheet, "출하리스트");
-      XLSX.writeFile(book, `출하리스트_${new Date().toISOString().slice(0,10)}.xlsx`);
-    };
+    }
   </script>
 </body>
 </html>
